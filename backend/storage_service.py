@@ -6,7 +6,8 @@ import cv2
 class StorageService:
     """Handles all file system operations, disk saves, and dataset loading."""
 
-    def __init__(self, pose_library: list, save_dir: str = "saved"):
+    def __init__(self, pose_service, pose_library: list, save_dir: str = "saved"):
+        self.pose_service = pose_service
         self.pose_library = pose_library
         self.save_dir = os.path.join(os.getcwd(), save_dir)
         os.makedirs(self.save_dir, exist_ok=True)
@@ -32,6 +33,9 @@ class StorageService:
 
         for filename in files:
             saved_path = os.path.join(self.save_dir, filename)
+
+            _, _, angles = self.pose_service.process_static_image(saved_path)
+
             pose_index = len(self.pose_library) + 1
             pose_name = f"Pose_{pose_index}"
             display_filename = re.sub(r'^pose_\d+_', '', filename)
@@ -39,7 +43,7 @@ class StorageService:
             entry = {
                 "name": pose_name,
                 "display_name": f"{pose_name} ({display_filename})",
-                "angles": None,
+                "angles": angles,
                 "path": saved_path
             }
             
@@ -59,7 +63,7 @@ class StorageService:
         pose_name = f"Pose_{pose_index}"
         entry = {
             "name": pose_name,
-            "display_name": f"{filename}",
+            "display_name": filename,
             "saved_filename": filename,
             "angles": angles,
             "path": saved_path

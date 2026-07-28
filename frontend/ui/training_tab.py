@@ -8,13 +8,15 @@ from frontend.ui.helpers import bgr_to_pixmap
 from frontend.widgets.drop_zone import DropZone
 from frontend.widgets.widget_formatter import create_bordered_section
 
+
 class TrainingTab(QWidget):
     request_process_image = Signal(str)
 
-    def __init__(self, storage_service: object):
+    def __init__(self, storage_service: object, pose_service: object):
         super().__init__()
-        # Injected backend service
+        # Injected backend services
         self.storage_service = storage_service
+        self.pose_service = pose_service
         self.pose_library = storage_service.pose_library
 
         layout = QVBoxLayout()
@@ -76,7 +78,7 @@ class TrainingTab(QWidget):
 
     @Slot(int)
     def on_pose_selected(self, index: int):
-        """Displays the selected pose's preview image."""
+        """Displays the selected pose's preview image with skeleton annotations."""
         if index < 0 or index >= len(self.pose_library):
             return
 
@@ -84,7 +86,9 @@ class TrainingTab(QWidget):
         image_path = pose_data.get("path")
 
         if image_path and os.path.exists(image_path):
-            annotated_img = cv2.imread(image_path)
+            # Process through injected pose_service to generate the annotated overlay on the fly
+            _, annotated_img, _ = self.pose_service.process_static_image(image_path)
+
             if annotated_img is not None:
                 pixmap = bgr_to_pixmap(
                     annotated_img,
@@ -92,18 +96,36 @@ class TrainingTab(QWidget):
                     self.preview_label.height()
                 )
                 self.preview_label.setPixmap(pixmap)
+            else:
+                # Fallback to raw image if detection fails on reload
+                raw_img = cv2.imread(image_path)
+                if raw_img is not None:
+                    pixmap = bgr_to_pixmap(
+                        raw_img,
+                        self.preview_label.width(),
+                        self.preview_label.height()
+                    )
+                    self.preview_label.setPixmap(pixmap)
 
-    @Slot(object, object, str)
-    def on_image_processed(self, annotated_img, angles, file_path: str):
-        """Receives processed output from PoseService and delegates saving to StorageService."""
+    @Slot(object, object, object, str)
+    def on_image_processed(self, raw_img, annotated_img, angles, file_path: str):
+        """Saves raw image to disk, but displays annotated_img in the preview pane."""
         if annotated_img is None:
             self.status_label.setText("⚠️ No posture detected in that image! Try another one.")
             return
 
-        # Delegate disk writing and record registration to StorageService
-        entry = self.storage_service.save_pose_image(annotated_img, angles, file_path)
+        # Save RAW image so GameTab gets a clean photo without skeleton lines
+        entry = self.storage_service.save_pose_image(raw_img, angles, file_path)
 
-        # Update UI View
+        # Display annotated preview in the TrainingTab preview box
+        pixmap = bgr_to_pixmap(
+            annotated_img,
+            self.preview_label.width(),
+            self.preview_label.height()
+        )
+        self.preview_label.setPixmap(pixmap)
+
+        # Update UI List
         self.pose_list_widget.addItem(entry["display_name"])
         self.pose_list_widget.setCurrentRow(len(self.pose_library) - 1)
         self.status_label.setText(f"✓ Saved {entry['saved_filename']} as {entry['name']}!")
