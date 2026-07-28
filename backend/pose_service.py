@@ -2,19 +2,23 @@ import cv2
 import numpy as np
 import mediapipe as mp
 
-def calculate_angle(a, b, c):
-    a = np.array([a.x, a.y])
-    b = np.array([b.x, b.y])
-    c = np.array([c.x, c.y])
 
-    radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
+def calculate_angle(a, b, c) -> float:
+    """Calculates 2D angle (in degrees) formed at joint 'b' by endpoints 'a' and 'c'."""
+    a_arr = np.array([a.x, a.y])
+    b_arr = np.array([b.x, b.y])
+    c_arr = np.array([c.x, c.y])
+
+    radians = np.arctan2(c_arr[1] - b_arr[1], c_arr[0] - b_arr[0]) - np.arctan2(a_arr[1] - b_arr[1], a_arr[0] - b_arr[0])
     angle = np.abs(radians * 180.0 / np.pi)
     if angle > 180.0:
-        angle = 360 - angle
+        angle = 360.0 - angle
     return angle
 
 
-class PoseProcessor:
+class PoseService:
+    """Handles MediaPipe detection, skeletal rendering, and angle calculations."""
+
     def __init__(self):
         self.mp_pose = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
@@ -40,7 +44,8 @@ class PoseProcessor:
             )
         return self._stream_detector
 
-    def extract_angles(self, landmarks):
+    def extract_angles(self, landmarks) -> dict:
+        """Extracts key joint angles from detected landmarks."""
         lm = landmarks.landmark
         mp_p = self.mp_pose.PoseLandmark
         return {
@@ -50,8 +55,8 @@ class PoseProcessor:
             "r_knee": calculate_angle(lm[mp_p.RIGHT_HIP], lm[mp_p.RIGHT_KNEE], lm[mp_p.RIGHT_ANKLE]),
         }
 
-    def process_static_image(self, file_path):
-        """Processes an uploaded file. Returns (annotated_bgr_img, angles_dict) or (None, None)."""
+    def process_static_image(self, file_path: str):
+        """Processes a static file path. Returns (annotated_bgr_img, angles_dict) or (None, None)."""
         img = cv2.imread(file_path)
         if img is None:
             return None, None
@@ -70,8 +75,8 @@ class PoseProcessor:
         angles = self.extract_angles(results.pose_landmarks)
         return annotated_img, angles
 
-    def process_stream_frame(self, frame, target_angles=None, tolerance=20.0):
-        """Processes live camera frame. Returns (annotated_bgr_frame, is_match)."""
+    def process_stream_frame(self, frame, target_angles: dict = None, tolerance: float = 20.0):
+        """Processes a live camera frame. Returns (annotated_bgr_frame, is_match)."""
         frame = cv2.flip(frame, 1)
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         detector = self._get_stream_detector()
@@ -85,13 +90,14 @@ class PoseProcessor:
             if target_angles:
                 curr_angles = self.extract_angles(results.pose_landmarks)
                 is_match = all(
-                    abs(curr_angles[j] - target_angles[j]) < tolerance
-                    for j in target_angles
+                    abs(curr_angles[joint] - target_angles[joint]) < tolerance
+                    for joint in target_angles
                 )
 
         return frame, is_match
 
     def close(self):
+        """Releases active MediaPipe resources."""
         if self._static_detector:
             self._static_detector.close()
         if self._stream_detector:

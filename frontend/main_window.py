@@ -4,7 +4,9 @@ from PySide6.QtCore import Signal
 # Updated separate imports
 from frontend.ui.training_tab import TrainingTab
 from frontend.ui.game_tab import GameTab
-from backend.pose_processor import PoseProcessor
+
+from backend.pose_service import PoseService
+from backend.storage_service import StorageService
 
 class MainWindow(QMainWindow):
     image_processed = Signal(object, object, str)
@@ -16,11 +18,13 @@ class MainWindow(QMainWindow):
         self.resize(1000, 750)
 
         self.pose_library = []
-        self.processor = PoseProcessor()
+        self.processor = PoseService()
+
+        self.storage_service = StorageService(self.pose_library)
 
         self.tabs = QTabWidget()
-        self.training_tab = TrainingTab(self.pose_library)
-        self.game_tab = GameTab(self.pose_library)
+        self.training_tab = TrainingTab(self.storage_service)
+        self.game_tab = GameTab(self.storage_service)
 
         self.tabs.addTab(self.training_tab, "1. Training (Upload Poses)")
         self.tabs.addTab(self.game_tab, "2. Game (Play)")
